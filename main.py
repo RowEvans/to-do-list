@@ -38,6 +38,7 @@ class TaskWidget(QWidget):
         self.task_id = task_id
         self.button = QCheckBox()
         self.button.stateChanged.connect(self.cross_out)
+        self.button.setChecked(done)
         self.label = QLabel(text)
         self.label.setFont(self.task_font)
         self.edit = QLineEdit(text)
@@ -139,7 +140,62 @@ class AddTaskWidget(QWidget):
         if text:
             self.task_added.emit(text)
 
+class Header(QWidget):
+
+    minimize = Signal(bool)
+
+    def __init__(self):
+        super().__init__()
+
+        font_path = os.path.join(os.path.dirname(__file__), "assets/fonts/ArchivoBlack-Regular.ttf")
+        font_id = QFontDatabase.addApplicationFont(font_path)
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        self.title_font = QFont(families[0], 12) if families else QFont()
+
+        self.top_layout = QHBoxLayout()
+        self.setLayout(self.top_layout)
+        self.main_label = QLabel("Today's Tasks")
+        self.main_label.setFont(self.title_font)
+        self.main_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.main_label.setStyleSheet("font-size: 18px; font-weight: bold; border: 2px")
+        self.top_layout.addWidget(self.main_label)
+        self.top_layout.addStretch()
+        self.exit_button = QPushButton()
+        self.exit_button.setStyleSheet("background: transparent; border: none")
+        self.exit_button.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "assets", "icons", "close.png")))
+        self.exit_button.clicked.connect(lambda: self.minimize.emit(True))
+        self.exit_button.setIconSize(QSize(10, 10))
+        self.top_layout.addWidget(self.exit_button)
+
+class TaskScrollArea(QScrollArea):
+
+    task_added = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+
+        self.scroll_widget = QWidget()
+        self.setWidget(self.scroll_widget)
+        self.setWidgetResizable(True)
+
+        self.scroll_widget.setStyleSheet("background: transparent; border: none")
+        self.task_layout = QVBoxLayout()
+        self.scroll_widget.setLayout(self.task_layout)
         
+        self.add_task_row = AddTaskWidget()
+        self.add_task_row.task_added.connect(self.task_added)
+        self.task_layout.addWidget(self.add_task_row)
+
+        self.task_layout.addStretch()
+
+    def add_task_widget(self, widget, top=False):
+        if top:
+            self.task_layout.insertWidget(1, widget)
+        else:
+            self.task_layout.insertWidget(
+                self.task_layout.count() - 1,
+                widget
+            )
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -152,51 +208,21 @@ class MainWindow(QMainWindow):
         self.conn = sqlite3.connect(DB_FILE)
         self.init_tray()
 
-        font_path = os.path.join(os.path.dirname(__file__), "assets/fonts/ArchivoBlack-Regular.ttf")
-        font_id = QFontDatabase.addApplicationFont(font_path)
-        families = QFontDatabase.applicationFontFamilies(font_id)
-        self.title_font = QFont(families[0], 12) if families else QFont()
-
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        self.top_widget = QWidget()
-        self.top_layout = QHBoxLayout()
-        self.top_widget.setLayout(self.top_layout)
-        self.main_label = QLabel("Today's Tasks")
-        self.main_label.setFont(self.title_font)
-        self.main_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.main_label.setStyleSheet("font-size: 18px; font-weight: bold; border: 2px")
-        self.top_layout.addWidget(self.main_label)
-        self.top_layout.addStretch()
-        self.exit_button = QPushButton()
-        self.exit_button.setStyleSheet("background: transparent; border: none")
-        self.exit_button.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "assets", "icons", "close.png")))
-        self.exit_button.clicked.connect(self.close_window)
-        self.exit_button.setIconSize(QSize(10, 10))
-        self.top_layout.addWidget(self.exit_button)
-        
+        self.header = Header()
+        self.header.minimize.connect(self.close_window)
 
-        self.scroll_area = QScrollArea()
-        self.scroll_widget = QWidget()
-        self.scroll_area.setStyleSheet("background: transparent; border: none")
-        self.scroll_widget.setStyleSheet("background: transparent; border: none")
-        self.task_layout = QVBoxLayout()
-        self.scroll_widget.setLayout(self.task_layout)
-        self.scroll_area.setWidget(self.scroll_widget)
-        self.scroll_area.setWidgetResizable(True)
+        self.task_scroll = TaskScrollArea()
+        self.task_scroll.task_added.connect(self.add_new_task)
         self.load_tasks()
-        
-        self.add_task_row = AddTaskWidget()
-        self.add_task_row.task_added.connect(self.add_new_task)
-        self.task_layout.addWidget(self.add_task_row)
-
-        self.task_layout.addStretch()
 
         self.layout = QVBoxLayout()
         central_widget.setLayout(self.layout)
-        self.layout.addWidget(self.top_widget)
-        self.layout.addWidget(self.scroll_area)
+        self.layout.addWidget(self.header)
+        self.layout.addWidget(self.task_scroll)
+        
 
     def init_tray(self):
         self.tray_icon = QSystemTrayIcon(self)
@@ -243,7 +269,7 @@ class MainWindow(QMainWindow):
             widget.text_changed.connect(self.update_task_text)
             widget.done_changed.connect(self.update_task_done)
             widget.delete_requested.connect(self.delete_task)
-            self.task_layout.addWidget(widget)
+            self.task_scroll.add_task_widget(widget)
 
     def insert_task_db(self, text, done=False):
         cur = self.conn.cursor()
@@ -270,7 +296,7 @@ class MainWindow(QMainWindow):
         widget.text_changed.connect(self.update_task_text)
         widget.done_changed.connect(self.update_task_done)
         widget.delete_requested.connect(self.delete_task)
-        self.task_layout.insertWidget(0, widget)
+        self.task_scroll.add_task_widget(widget, top=True)
 
     def update_task_text(self, task_id, text):
         cur = self.conn.cursor()
@@ -287,8 +313,8 @@ class MainWindow(QMainWindow):
         cur.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         self.conn.commit()
 
-        for i in range(self.task_layout.count()):
-            item = self.task_layout.itemAt(i)
+        for i in range(self.task_scroll.task_layout.count()):
+            item = self.task_scroll.task_layout.itemAt(i)
             widget = item.widget()
             if isinstance(widget, TaskWidget) and widget.task_id == task_id:
                 widget.deleteLater()
@@ -302,8 +328,9 @@ class MainWindow(QMainWindow):
     #def add_new_task(self, text):
     #   self.task_layout.insertWidget(0, TaskWidget(text))
 
-    def close_window(self, _):
-        self.hide()
+    def close_window(self, val):
+        if val:
+            self.hide()
 
 
 
