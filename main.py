@@ -1,4 +1,6 @@
 import sys
+import os
+from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 
@@ -6,10 +8,17 @@ class TaskWidget(QWidget):
     def __init__(self, text):
         super().__init__()
 
+        font_path = os.path.join(os.path.dirname(__file__), "assets/fonts/Roboto-VariableFont_wdth,wght.ttf")
+        font_id = QFontDatabase.addApplicationFont(font_path)
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        self.task_font = QFont(families[0], 10) if families else QFont()
+
         self.button = QCheckBox()
-        #self.button.stateChanged.connect()
+        self.button.stateChanged.connect(self.cross_out)
         self.label = QLabel(text)
+        self.label.setFont(self.task_font)
         self.edit = QLineEdit(text)
+        self.edit.setFont(self.task_font)
         self.edit.hide()
 
         self.label.setStyleSheet("background: transparent; border: none")
@@ -44,52 +53,123 @@ class TaskWidget(QWidget):
         self.edit.hide()
         self.label.show()
 
+    def cross_out(self, state):
+        font = self.label.font()
+        font.setStrikeOut(state == Qt.Checked.value)
+        self.label.setFont(font)
+
+
+class AddTaskWidget(QWidget):
+
+    task_added = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+
+        font_path = os.path.join(os.path.dirname(__file__), "assets/fonts/Roboto-VariableFont_wdth,wght.ttf")
+        font_id = QFontDatabase.addApplicationFont(font_path)
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        self.task_font = QFont(families[0], 10) if families else QFont()
+
+        self.label = QLabel("Add task... ")
+        self.edit = QLineEdit()
+        self.edit.hide()
+
+        self.label.setStyleSheet("background: transparent; border: none")
+        self.label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.label.setFont(self.task_font)
+
+        self.edit.setStyleSheet("background: transparent; border: none")
+        self.edit.setFont(self.task_font)
+
+        self.label.mousePressEvent = self.start_editing
+
+        layout = QHBoxLayout()
+        layout.setSpacing(5)
+        layout.setContentsMargins(10,0,0,0)
+        layout.addWidget(self.label)
+        layout.addWidget(self.edit)
+        layout.addStretch()
+        self.setLayout(layout)
+
+        self.edit.editingFinished.connect(self.finish_edit)
+
+    def start_editing(self, _):
+        self.label.hide()
+        self.edit.setText("")
+        self.edit.show()
+        self.edit.setFocus()
+
+    def finish_edit(self):
+        text = self.edit.text().strip()
+        self.edit.hide()
+        self.label.show()
+
+        if text:
+            self.task_added.emit(text)
+
+        
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("To Do")
         self.resize(350,500)
 
+        self.setWindowFlags(Qt.FramelessWindowHint)
+
+        font_path = os.path.join(os.path.dirname(__file__), "assets/fonts/ArchivoBlack-Regular.ttf")
+        font_id = QFontDatabase.addApplicationFont(font_path)
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        self.title_font = QFont(families[0], 12) if families else QFont()
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
+        self.top_widget = QWidget()
+        self.top_layout = QHBoxLayout()
+        self.top_widget.setLayout(self.top_layout)
         self.main_label = QLabel("Today's Tasks")
+        self.main_label.setFont(self.title_font)
+        self.main_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.main_label.setStyleSheet("font-size: 18px; font-weight: bold; border: 2px")
+        self.top_layout.addWidget(self.main_label)
+        self.top_layout.addStretch()
+        self.exit_button = QPushButton()
+        self.exit_button.setStyleSheet("background: transparent; border: none")
+        self.exit_button.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "assets", "icons", "close.png")))
+        self.exit_button.clicked.connect(self.close_window)
+        self.exit_button.setIconSize(QSize(10, 10))
+        self.top_layout.addWidget(self.exit_button)
+        
 
         self.scroll_area = QScrollArea()
         self.scroll_widget = QWidget()
+        self.scroll_area.setStyleSheet("background: transparent; border: none")
+        self.scroll_widget.setStyleSheet("background: transparent; border: none")
         self.task_layout = QVBoxLayout()
         self.scroll_widget.setLayout(self.task_layout)
         self.scroll_area.setWidget(self.scroll_widget)
         self.scroll_area.setWidgetResizable(True)
         self.task_layout.addWidget(TaskWidget("Finish Homework"))
         self.task_layout.addWidget(TaskWidget("Finish EE"))
-        self.task_layout.addWidget(TaskWidget("Add task..."))
+        
+        self.add_task_row = AddTaskWidget()
+        self.add_task_row.task_added.connect(self.add_new_task)
+        self.task_layout.addWidget(self.add_task_row)
+
         self.task_layout.addStretch()
-        
-
-        self.add_task = QWidget()
-        self.add_button = QPushButton("Add task...")
-        self.add_button.clicked.connect(self.add_new_task)
-        self.mic_button = QPushButton("Microphone")
-        
-        self.bottom_bar_layout = QHBoxLayout()
-        self.add_task.setLayout(self.bottom_bar_layout)
-        self.bottom_bar_layout.addWidget(self.add_button)
-        self.bottom_bar_layout.addStretch()
-        self.bottom_bar_layout.addWidget(self.mic_button)
-
 
         self.layout = QVBoxLayout()
         central_widget.setLayout(self.layout)
-        self.layout.addWidget(self.main_label)
+        self.layout.addWidget(self.top_widget)
         self.layout.addWidget(self.scroll_area)
-        self.layout.addWidget(self.add_task)
 
-    def add_new_task(self):
-        task, ok = QInputDialog.getText(self, "New Task", "Task Name:")
+    def add_new_task(self, text):
+        self.task_layout.insertWidget(0, TaskWidget(text))
 
-        if ok and task.strip():
-            self.task_layout.insertWidget(self.task_layout.count() - 1, TaskWidget(task))
+    def close_window(self, _):
+        sys.exit()
 
 
 
