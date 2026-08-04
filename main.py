@@ -4,6 +4,7 @@ import sqlite3
 from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
+from voice import VoiceManager
 
 DB_FILE = os.path.join(os.path.dirname(__file__), "tasks.db")
 
@@ -207,6 +208,10 @@ class MainWindow(QMainWindow):
         init_db()
         self.conn = sqlite3.connect(DB_FILE)
         self.init_tray()
+
+        self.voice_manager = VoiceManager()
+        self.voice_manager.task_recognized.connect(self.add_new_task)
+        self.voice_manager.listen()
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)

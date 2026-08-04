@@ -146,8 +146,6 @@ class VoiceManager(QObject):
         
         if event is None:
             return
-        #if 'start' in event:
-            #self.start_command()
         if 'end' in event:
             self.stop_command()
 
@@ -165,7 +163,6 @@ class VoiceManager(QObject):
     def _transcribe(self, audio):
         text = self.whisper.transcribe(audio)
         text = text.strip()
-        print(text)
         self.task_recognized.emit(text)
 
 if __name__ == "__main__":
