@@ -1,0 +1,6 @@
+numpy
+openwakeword
+PySide6
+faster-whisper
+silero-vad
+sounddevice

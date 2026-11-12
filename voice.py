@@ -5,7 +5,6 @@ from faster_whisper import WhisperModel
 from silero_vad import load_silero_vad, VADIterator
 from openwakeword.model import Model
 import torch
-import time
 import threading
 
 class WakeWordEngine(QObject):
